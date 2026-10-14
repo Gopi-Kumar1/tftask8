@@ -1,14 +1,6 @@
 locals {
-  vpc_name              = "${var.project_id}-vpc"
-  ssh_sg_name           = "${var.project_id}-ec2_sg"
-  http_sg_name          = "${var.project_id}-http_sg"
-  lb_sg_name            = "${var.project_id}-sglb"
-  instance_profile_name = "${var.project_id}-instance_profile"
-  key_pair_name         = "${var.project_id}-keypair"
-  launch_template_name  = "${var.project_id}-template"
-  asg_name              = "${var.project_id}-asg"
-  alb_name              = "${var.project_id}-loadbalancer"
-  target_group_name     = "${var.project_id}-tg"
+  vpc_name      = "${var.project_id}-vpc"
+  key_pair_name = "${var.project_id}-keypair"
 
   common_tags = {
     Terraform = "true"
@@ -16,9 +8,9 @@ locals {
   }
 }
 
+# ---------- Data sources (pre-created resources) ----------
 
 data "aws_vpc" "main" {
-  cidr_block = var.vpc_cidr
 
   filter {
     name   = "tag:Name"
@@ -38,17 +30,17 @@ data "aws_subnet" "public_b" {
 
 data "aws_security_group" "ssh" {
   vpc_id = data.aws_vpc.main.id
-  name   = local.ssh_sg_name
+  name   = var.ssh_sg_name
 }
 
 data "aws_security_group" "http" {
   vpc_id = data.aws_vpc.main.id
-  name   = local.http_sg_name
+  name   = var.http_sg_name
 }
 
 data "aws_security_group" "lb" {
   vpc_id = data.aws_vpc.main.id
-  name   = local.lb_sg_name
+  name   = var.lb_sg_name
 }
 
 data "aws_ami" "amazon_linux_2023" {
@@ -66,15 +58,16 @@ data "aws_ami" "amazon_linux_2023" {
   }
 }
 
+# ---------- Launch Template ----------
 
 resource "aws_launch_template" "app" {
-  name          = local.launch_template_name
+  name          = var.launch_template_name
   image_id      = data.aws_ami.amazon_linux_2023.id
   instance_type = var.instance_type
   key_name      = local.key_pair_name
 
   iam_instance_profile {
-    name = local.instance_profile_name
+    name = var.instance_profile_name
   }
 
   network_interfaces {
@@ -114,9 +107,10 @@ resource "aws_launch_template" "app" {
   tags = local.common_tags
 }
 
+# ---------- Target Group ----------
 
 resource "aws_lb_target_group" "app" {
-  name     = local.target_group_name
+  name     = var.target_group_name
   port     = 80
   protocol = "HTTP"
   vpc_id   = data.aws_vpc.main.id
@@ -134,9 +128,10 @@ resource "aws_lb_target_group" "app" {
   tags = local.common_tags
 }
 
+# ---------- Load Balancer and Listener ----------
 
 resource "aws_lb" "app" {
-  name               = local.alb_name
+  name               = var.alb_name
   load_balancer_type = "application"
   internal           = false
   security_groups    = [data.aws_security_group.lb.id]
@@ -158,9 +153,10 @@ resource "aws_lb_listener" "http" {
   tags = local.common_tags
 }
 
+# ---------- Auto Scaling Group and Attachment ----------
 
 resource "aws_autoscaling_group" "app" {
-  name                      = local.asg_name
+  name                      = var.asg_name
   desired_capacity          = 2
   min_size                  = 1
   max_size                  = 2
